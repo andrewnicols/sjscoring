@@ -100,6 +100,14 @@ var Penalties = {
     isEliminated: true,
     isRetired: false,
   },
+  errorOfCourse: {
+    desc: "The rider made an error of course",
+    values: ["eoc"],
+    faultPenalty: Results.Eliminated,
+    timePenalty: Results.Eliminated,
+    isEliminated: true,
+    isRetired: false,
+  },
   outsideAssitance: {
     desc: "The rider received outside assistance",
     values: ["a"],
