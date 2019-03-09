@@ -497,12 +497,15 @@ function getPlacingsForRange(allTotals) {
     return allPlacings;
 }
 
-function getPlacingsForRangeWithTime(allTotals, allTimes) {
+function getPlacingsForRangeWithTime(allTotals, allTimes, previousRoundPlacings, fallbackPlacings, ignoreTimesForFirstPlace) {
+
     var placingTotals = allTotals
         .filter(function(val) { return val.length; })
         .map(function(val) { return val[0];})
         .filter(function(val) { return ("" + val).length; })
         .sort(sortByPenalty);
+
+    var lowestFault = 50000;
 
     var faultsWithTime = [];
     allTotals
@@ -518,7 +521,19 @@ function getPlacingsForRangeWithTime(allTotals, allTimes) {
                 fault: curTotal,
                 time: allTimes[index][0],
             });
+
+            if (curTotal < lowestFault) {
+                lowestFault = curTotal;
+            }
         });
+
+    if (ignoreTimesForFirstPlace) {
+        for (var i in faultsWithTime) {
+            if (lowestFault === faultsWithTime[i].fault) {
+                faultsWithTime[i].time = 0;
+            }
+        }
+    }
 
     // We return a placing for each row. These rows must match the order of the allTotals/allTimes rows.
     var allPlacings = [];
@@ -526,8 +541,9 @@ function getPlacingsForRangeWithTime(allTotals, allTimes) {
         // Find the position of this fault penalty amongst its peers.
         var thisTotal = curRow[0];
         if ('' === ("" + thisTotal).trim()) {
-            // Empty row - append an empty row..
-            allPlacings.push(['']);
+            // Empty row - look at the previous Round Placing.
+            allPlacings.push([getPreviousRoundPlacing(index, previousRoundPlacings, fallbackPlacings)]);
+
             return;
         }
 
@@ -542,6 +558,9 @@ function getPlacingsForRangeWithTime(allTotals, allTimes) {
 
             // Grab the time for this round.
             var thisTime = allTimes[index][0];
+            if (ignoreTimesForFirstPlace && lowestFault === thisTotal) {
+                thisTime = 0;
+            }
 
             // Now find the rows with a matching fault total.
             var positionBehindFaultLeader = 0;
@@ -615,3 +634,20 @@ function sortByPenalty(a, b) {
 
     return a - b;
 }
+
+function getPreviousRoundPlacing(index, previousRoundPlacings, fallbackPlacings) {
+    if (!previousRoundPlacings) {
+        return '';
+    }
+
+    var previousRoundPlacing = previousRoundPlacings[index][0];
+    if ('' === ("" + previousRoundPlacing).trim()) {
+        // Nothing in the previousRoundPlacing.
+        return getPreviousRoundPlacing(index, fallbackPlacings);
+    }
+
+    return previousRoundPlacing;
+}
+
+
+// vim: set filetype=javascript:
