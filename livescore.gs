@@ -259,8 +259,15 @@ function fillAllPenalties(height, timeAllowed, values, timeTaken, timePenaltyPer
             // Seconds over / Time Penalty period (i.e. 4)
             // Seconds over / Time Penalty period  * Penalty period
             timeIncRebuild = 0 + timeTaken + result.timeAddition;
-            timePenalty = Math.ceil(Math.max(0, timeIncRebuild - timeAllowed) / timePenaltyPeriod) * timePenaltyAmount;
-            totalPenalty = timePenalty + jumpPenalty;
+
+            if (timeIncRebuild > (timeAllowed * 2)) {
+                // The time taken exceeded the time allowed.
+                totalPenalty = Results.Eliminated;
+                jumpPenalty = '';
+            } else {
+                timePenalty = Math.ceil(Math.max(0, timeIncRebuild - timeAllowed) / timePenaltyPeriod) * timePenaltyAmount;
+                totalPenalty = timePenalty + jumpPenalty;
+            }
         }
     }
 
