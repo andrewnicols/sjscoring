@@ -1,7 +1,7 @@
 /**
  * Show Jumping Live Scoring spreadsheet.
  *
- * Version 20180701.
+ * Version 20190310.
  * Based on Equestrian Australia Rules for 2018/07/01
  *
  * @copyright  2019 Andrew Nicols <andrew@nicols.co.uk>
@@ -19,11 +19,10 @@
  */
 
 // TODO
-// - Defer back to first round placings where not enough competitors were present to compete in the second round.
-// - Support options for rounds being against the clock, or not against the clock according to Article 238.1 and 238.2.
-// - Automatically eliminate riders for exceeding the Time Limit.
+// - Better support options for rounds being against the clock, or not against the clock according to Article 238.1 and 238.2.
 // - Document the world.
 // - Add references to rules.
+// - Make scratchings clearer.
 
 var Results = {
     Eliminated: 'E',
@@ -276,39 +275,6 @@ function fillAllPenalties(height, timeAllowed, values, timeTaken, timePenaltyPer
     return [rowResult];
 }
 
-/**
- * Calculate the penalties for the round.
- *
- * @param   Number  height The height of jumps on the round
- * @param   Range   values The values
- * @return  String
- */
-function calculatePenalties(height, values) {
-    var result = getRoundValues(height, values);
-    if (result && result.penalty) {
-        return result.penalty;
-    }
-
-    return '';
-}
-
-
-/**
- * Calculate the time additions for the round.
- *
- * @param   Number  height The height of jumps on the round
- * @param   Range   values The values
- * @return  String
- */
-function calculateRebuildTimes(height, values) {
-    var result = getRoundValues(height, values);
-    if (result) {
-        return result.timeAddition;
-    }
-
-    return '';
-}
-
 function getRoundValues(height, values) {
     Logger.log("Checking values for " + height + ":", values);
     var allValues = getFilledValuesForRound(values);
@@ -497,6 +463,19 @@ function getPlacingsForRange(allTotals) {
     return allPlacings;
 }
 
+/**
+ * Get the list of placings given the total penalties and times for a round, and allowing for fallback to previous round
+ * placings and the option to ignore time taken for the first place holder.
+ *
+ * This allows calculation of equal first place on penalties alone, whilst filling in remaining placings by penalties,
+ * then time.
+ *
+ * @param   {Array}     allTotals       3D array of Rows.Columns for total penalties for each rider
+ * @param   {Array}     allTimes        3D array of Rows.Columns for time taken (including rebuilds) for each rider
+ * @param   {Array}     previousRoundPlacings 3D array of Rows.Columns for placings from the previous round where no placing was attained in this round
+ * @param   {Array}     fallbackingPlacings 3D array of Rows.Columns for fallback placings if no placing was attained in current or previous round.
+ * @param   {Boolean}   ignoreTimesForFirstPlace Whether to ignore times for the first place holder.
+ */
 function getPlacingsForRangeWithTime(allTotals, allTimes, previousRoundPlacings, fallbackPlacings, ignoreTimesForFirstPlace) {
 
     var placingTotals = allTotals
@@ -605,7 +584,7 @@ function getPlacingsForRangeWithTime(allTotals, allTimes, previousRoundPlacings,
  *
  * @param   {String|Number}   a The left-hand value for comparison.
  * @param   {String|Number}   b The right-hand value for comparison.
- * @return  Number              Numeric sort comparitor for the two.
+ * @return  {Number}            Numeric sort comparitor for the two.
  */
 function sortByPenalty(a, b) {
     // Note: Article 247.2 states:
@@ -635,6 +614,14 @@ function sortByPenalty(a, b) {
     return a - b;
 }
 
+/**
+ * Fallback to placings from a previous round.
+ *
+ * @param   {Number}    index The index to check for placings.
+ * @param   {Array}     previousRoundPlacings List of placings from the previous round.
+ * @param   {Array}     fallbackPlacing List of placings from any fallback/first round in the case of a competition in three rounds.
+ * @return  {String}
+ */
 function getPreviousRoundPlacing(index, previousRoundPlacings, fallbackPlacings) {
     if (!previousRoundPlacings) {
         return '';
