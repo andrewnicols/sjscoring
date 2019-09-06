@@ -1,8 +1,8 @@
 /**
  * Show Jumping Live Scoring spreadsheet.
  *
- * Version 20190310.
- * Based on Equestrian Australia Rules for 2018/07/01
+ * Version 20190906.
+ * Based on Equestrian Australia Rules for 2019/04/01
  *
  * @copyright  2019 Andrew Nicols <andrew@nicols.co.uk>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -48,6 +48,7 @@ var Penalties = {
     timePenalty: 0,
     isEliminated: false,
     isRetired: false,
+    tableCPenalty: 0,
   },
   knockdown: {
     desc: "Knockdown",
@@ -56,6 +57,7 @@ var Penalties = {
     timePenalty: 0,
     isEliminated: false,
     isRetired: false,
+    tableCPenalty: 4,
   },
   refusal: {
     desc: "Refusal",
@@ -64,6 +66,7 @@ var Penalties = {
     timePenalty: 0,
     isEliminated: false,
     isRetired: false,
+    tableCPenalty: calculateRefusalTableCPenalty,
   },
   rebuild: {
     desc: "Refusal with a rebuild of the jump required. Six seconds will be added to the time taken.",
@@ -74,6 +77,7 @@ var Penalties = {
     countAs: 'refusal',
     isEliminated: false,
     isRetired: false,
+    tableCPenalty: 0,
   },
   fallOfHorse: {
     desc: "Fall of Horse",
@@ -82,6 +86,7 @@ var Penalties = {
     timePenalty: Results.Eliminated,
     isEliminated: true,
     isRetired: false,
+    tableCPenalty: Results.Eliminated,
   },
   fallOfRider: {
     desc: "Fall of Rider",
@@ -90,6 +95,7 @@ var Penalties = {
     timePenalty: Results.Eliminated,
     isEliminated: true,
     isRetired: false,
+    tableCPenalty: Results.Eliminated,
   },
   timeExceeded: {
     desc: "The time limit for the round was exceeded",
@@ -98,6 +104,7 @@ var Penalties = {
     timePenalty: Results.Eliminated,
     isEliminated: true,
     isRetired: false,
+    tableCPenalty: Results.Eliminated,
   },
   errorOfCourse: {
     desc: "The rider made an error of course",
@@ -106,6 +113,7 @@ var Penalties = {
     timePenalty: Results.Eliminated,
     isEliminated: true,
     isRetired: false,
+    tableCPenalty: Results.Eliminated,
   },
   outsideAssitance: {
     desc: "The rider received outside assistance",
@@ -114,6 +122,7 @@ var Penalties = {
     timePenalty: Results.Eliminated,
     isEliminated: true,
     isRetired: false,
+    tableCPenalty: Results.Eliminated,
   },
   retired: {
     desc: "The rider chose to retire",
@@ -122,6 +131,7 @@ var Penalties = {
     timePenalty: Results.Retired,
     isEliminated: false,
     isRetired: true,
+    tableCPenalty: Results.Eliminated,
   },
 };
 
@@ -233,7 +243,7 @@ function getClassificationMap() {
  *                         II of the EA Jumping Rules.
  * @param   Number timeAllowed The time allowed for the round.
  */
-function fillAllPenalties(height, timeAllowed, values, timeTaken, timePenaltyPeriod, timePenaltyAmount) {
+function fillAllPenalties(height, timeAllowed, values, timeTaken, timePenaltyPeriod, timePenaltyAmount, table) {
     // Order of fields is:
     // Time including rebuilds
     // Time penalties
@@ -244,7 +254,7 @@ function fillAllPenalties(height, timeAllowed, values, timeTaken, timePenaltyPer
         jumpPenalty = '',
         totalPenalty = '';
 
-    var result = getRoundValues(height, values);
+    var result = getRoundValues(height, values, table);
     if (result) {
         jumpPenalty = result.penalty;
 
@@ -275,8 +285,9 @@ function fillAllPenalties(height, timeAllowed, values, timeTaken, timePenaltyPer
     return [rowResult];
 }
 
-function getRoundValues(height, values) {
-    Logger.log("Checking values for " + height + ":", values);
+function getRoundValues(height, values, table) {
+    table = table || 'A';
+    Logger.log("Checking values for " + height + ": in table " + table, values);
     var allValues = getFilledValuesForRound(values);
 
     var roundClassifications = {};
@@ -298,6 +309,7 @@ function getRoundValues(height, values) {
                 count: 0,
                 faultPenalty: classification.faultPenalty,
                 timePenalty: classification.timePenalty,
+                tableCPenalty: classification.tableCPenalty,
                 isEliminated: classification.isEliminated,
                 isRetired: classification.isRetired,
             };
@@ -315,6 +327,7 @@ function getRoundValues(height, values) {
                         count: 0,
                         faultPenalty: countAsClassification.faultPenalty,
                         timePenalty: countAsClassification.timePenalty,
+                        tableCPenalty: countAsClassification.tableCPenalty,
                         isEliminated: classification.isEliminated,
                         isRetired: classification.isRetired,
                     };
@@ -328,7 +341,11 @@ function getRoundValues(height, values) {
         }
     });
 
-    return getAccumulatedPenalties(height, roundClassifications);
+    if ('A' == table) {
+        return getAccumulatedPenalties(height, roundClassifications);
+    } else {
+        return getAccumulatedTableCPenalties(height, roundClassifications);
+    }
 }
 
 function getFilledValuesForRound(values) {
@@ -417,6 +434,59 @@ function getAccumulatedPenalties(height, roundClassifications) {
     };
 }
 
+function getAccumulatedTableCPenalties(height, roundClassifications) {
+    var runningTimePenalty = 0;
+    var currentTimePenalty = 0;
+
+    var type;
+    var thisClassification;
+
+    var isEliminated = false,
+        isRetired = false,
+        hasAnyValue = false;
+
+    var runningScore = 0;
+    for (type in roundClassifications) {
+        hasAnyValue = true;
+        thisClassification = roundClassifications[type];
+        if ('function' === typeof thisClassification.tableCPenalty) {
+            currentTimePenalty = thisClassification.tableCPenalty(height, thisClassification.count)
+        } else if (thisClassification.isEliminated) {
+            currentTimePenalty = thisClassification.tableCPenalty;
+        } else if (thisClassification.isRetired) {
+            currentTimePenalty = thisClassification.tableCPenalty;
+        } else {
+            currentTimePenalty = ((thisClassification.tableCPenalty + thisClassification.timePenalty) * thisClassification.count);
+        }
+
+        Logger.log("Current time penalty is " + currentTimePenalty);
+        if (Results.Eliminated === currentTimePenalty) {
+            isEliminated = true;
+            runningScore = currentTimePenalty;
+            break;
+        }
+
+        if (Results.Retired === currentTimePenalty) {
+            isRetired = true;
+            runningScore = currentTimePenalty;
+            break;
+        }
+
+        runningTimePenalty += currentTimePenalty;
+    }
+
+    if (!hasAnyValue) {
+        return;
+    }
+
+    return {
+        penalty: runningScore,
+        timeAddition: runningTimePenalty,
+        isEliminated: isEliminated,
+        isRetired: isRetired,
+    };
+}
+
 function calculateRefusalPenalty(height, count) {
     // https://www.equestrian.org.au/sites/default/files/Annex%20II%20%20Speed%20and%20Elimination%20Table.pdf
     if (count) {
@@ -431,6 +501,26 @@ function calculateRefusalPenalty(height, count) {
         }
 
         // At heights above 115, only 2 disobediences are allowed.
+        return Results.Eliminated;
+    }
+
+    return '';
+}
+
+function calculateRefusalTableCPenalty(height, count) {
+    // https://www.equestrian.org.au/sites/default/files/Annex%20II%20%20Speed%20and%20Elimination%20Table.pdf
+    if (count) {
+        if (count === 1) {
+            return 0;
+        }
+        if (height <= 115) {
+            // At heights at or below 115, 2 disobediences are allowed.
+            if (2 === count) {
+                return 0
+            }
+        }
+
+        // At heights above 115, only e disobedience is allowed.
         return Results.Eliminated;
     }
 
